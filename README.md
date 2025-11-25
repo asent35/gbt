@@ -85,8 +85,8 @@ gbt-sistem/
 
 ## 📝 Lisans
 
-AsEnTJ Studios © 2024
+Asent Studios © 2024
 
 ---
 
-Made with 💙 by AsEnTJ Studios
+Made with 💙 by Asent Studios

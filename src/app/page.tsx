@@ -696,7 +696,7 @@ export default function GBTSistemi() {
               <span>GBT Sorgulama Sistemi v1.0</span>
             </div>
             <div className="text-gray-500 text-xs font-mono">
-              AsEnTJ Studios © {new Date().getFullYear()}
+              Asent Studios © {new Date().getFullYear()}
             </div>
           </div>
         </div>
