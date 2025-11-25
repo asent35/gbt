@@ -49,11 +49,8 @@ npm run dev
 3. Environment Variables'a Supabase bilgilerini ekle
 4. Deploy!
 
-## 🔐 Admin Şifresi
 
-Kayıt silme işlemi için şifre: `AsEnTJ_?WORLD_ESHOT1?STUDIO`
 
-> ⚠️ Güvenlik için bu şifreyi environment variable olarak saklamak önerilir
 
 ## 📁 Proje Yapısı
 
