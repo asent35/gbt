@@ -14,3 +14,12 @@ export interface SucKaydi {
   sure_tipi: 'dakika' | 'saat'
   olusturma_tarihi: string
 }
+
+export interface GorevKaydi {
+  id: string
+  gorev_adi: string
+  gorev_aciklama: string
+  oyuncular: string
+  birim: 'Asayiş' | 'Trafik' | 'PÖH'
+  olusturma_tarihi: string
+}

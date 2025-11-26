@@ -1,43 +1,54 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Shield, Search, Plus, Trash2, Clock, AlertTriangle, CheckCircle, XCircle, Lock, Eye, EyeOff, Database, User, FileText, Timer, RefreshCw } from 'lucide-react'
-import { supabase, SucKaydi } from '@/lib/supabase'
+import { Shield, Search, Plus, Trash2, Clock, AlertTriangle, CheckCircle, XCircle, Lock, Eye, EyeOff, Database, User, FileText, Timer, RefreshCw, Briefcase, Users } from 'lucide-react'
+import { supabase, SucKaydi, GorevKaydi } from '@/lib/supabase'
 
 // Admin şifresi (gerçek uygulamada environment variable olmalı)
 const ADMIN_PASSWORD = 'AsEnTJ_?WORLD_ESHOT1?STUDIO'
 
 export default function GBTSistemi() {
-  // State tanımlamaları
+  // SUÇ KAYITLARI State tanımlamaları
   const [kayitlar, setKayitlar] = useState<SucKaydi[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'sorgula' | 'ekle'>('sorgula')
-  
-  // Form state
+
+  // Suç Form state
   const [kullaniciAdi, setKullaniciAdi] = useState('')
   const [sebep, setSebep] = useState('')
   const [sure, setSure] = useState('')
   const [sureTipi, setSureTipi] = useState<'dakika' | 'saat'>('dakika')
-  
+
   // Arama state
   const [aramaQuery, setAramaQuery] = useState('')
-  
+
+  // GÖREV KAYITLARI State tanımlamaları
+  const [gorevKayitlari, setGorevKayitlari] = useState<GorevKaydi[]>([])
+  const [gorevLoading, setGorevLoading] = useState(true)
+
+  // Görev Form state
+  const [gorevAdi, setGorevAdi] = useState('')
+  const [gorevAciklama, setGorevAciklama] = useState('')
+  const [oyuncular, setOyuncular] = useState('')
+  const [birim, setBirim] = useState<'Asayiş' | 'Trafik' | 'PÖH'>('Asayiş')
+
   // Cooldown state
   const [cooldown, setCooldown] = useState(0)
   const [cooldownActive, setCooldownActive] = useState(false)
-  
+
   // Şifre modal state
   const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [selectedKayitId, setSelectedKayitId] = useState<string | null>(null)
+  const [deleteType, setDeleteType] = useState<'suc' | 'gorev'>('suc') // Hangi tablo için silme işlemi
   const [passwordAttempts, setPasswordAttempts] = useState(0)
   const [lockoutTime, setLockoutTime] = useState(0)
   const [passwordError, setPasswordError] = useState('')
-  
+
   // Toast/Notification state
   const [notification, setNotification] = useState<{type: 'success' | 'error' | 'warning', message: string} | null>(null)
-  
+
   // Sistem saati
   const [currentTime, setCurrentTime] = useState(new Date())
 
@@ -115,6 +126,28 @@ export default function GBTSistemi() {
     fetchKayitlar()
   }, [fetchKayitlar])
 
+  // Görev Kayıtlarını yükle
+  const fetchGorevKayitlari = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('gorev_kayitlari')
+        .select('*')
+        .order('olusturma_tarihi', { ascending: false })
+
+      if (error) throw error
+      setGorevKayitlari(data || [])
+    } catch (error) {
+      console.error('Görev kayıtları yüklenirken hata:', error)
+      setGorevKayitlari([])
+    } finally {
+      setGorevLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchGorevKayitlari()
+  }, [fetchGorevKayitlari])
+
   // Yeni kayıt ekle
   const handleEkle = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -179,8 +212,59 @@ export default function GBTSistemi() {
     }
   }
 
+  // Yeni görev ekle
+  const handleGorevEkle = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (cooldownActive) {
+      setNotification({ type: 'warning', message: `Lütfen ${cooldown} saniye bekleyin` })
+      return
+    }
+
+    if (!gorevAdi.trim() || !gorevAciklama.trim() || !oyuncular.trim()) {
+      setNotification({ type: 'error', message: 'Tüm alanları doldurun' })
+      return
+    }
+
+    try {
+      const yeniGorev: Omit<GorevKaydi, 'id'> = {
+        gorev_adi: gorevAdi.trim(),
+        gorev_aciklama: gorevAciklama.trim(),
+        oyuncular: oyuncular.trim(),
+        birim: birim,
+        olusturma_tarihi: new Date().toISOString()
+      }
+
+      const { data, error } = await supabase
+        .from('gorev_kayitlari')
+        .insert([yeniGorev])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setGorevKayitlari(prev => [data, ...prev])
+      setNotification({ type: 'success', message: 'Görev kaydı başarıyla oluşturuldu' })
+
+      // Formu temizle
+      setGorevAdi('')
+      setGorevAciklama('')
+      setOyuncular('')
+      setBirim('Asayiş')
+
+      // 10 saniye cooldown başlat
+      setCooldown(10)
+      setCooldownActive(true)
+
+    } catch (error) {
+      console.error('Görev eklenirken hata:', error)
+      setNotification({ type: 'error', message: 'Görev eklenirken hata oluştu' })
+    }
+  }
+
   // Silme işlemi için şifre kontrolü
-  const handleSilmeBaslat = (id: string) => {
+  const handleSilmeBaslat = (id: string, type: 'suc' | 'gorev' = 'suc') => {
+    setDeleteType(type)
     if (lockoutTime > 0) {
       setNotification({ type: 'error', message: `${lockoutTime} saniye beklemeniz gerekiyor` })
       return
@@ -202,26 +286,37 @@ export default function GBTSistemi() {
       // Şifre doğru - sil
       try {
         if (selectedKayitId) {
+          const tableName = deleteType === 'suc' ? 'suc_kayitlari' : 'gorev_kayitlari'
           const { error } = await supabase
-            .from('suc_kayitlari')
+            .from(tableName)
             .delete()
             .eq('id', selectedKayitId)
 
           if (error) throw error
         }
-        
-        setKayitlar(prev => prev.filter(k => k.id !== selectedKayitId))
+
+        // İlgili state'i güncelle
+        if (deleteType === 'suc') {
+          setKayitlar(prev => prev.filter(k => k.id !== selectedKayitId))
+        } else {
+          setGorevKayitlari(prev => prev.filter(k => k.id !== selectedKayitId))
+        }
+
         setNotification({ type: 'success', message: 'Kayıt başarıyla silindi' })
         setShowPasswordModal(false)
         setPasswordAttempts(0)
         setPassword('')
         setSelectedKayitId(null)
-        
+
       } catch (error) {
         console.error('Silme hatası:', error)
-        // Demo mod için local silme
-        setKayitlar(prev => prev.filter(k => k.id !== selectedKayitId))
-        setNotification({ type: 'success', message: 'Kayıt silindi (Demo Mod)' })
+        // Hata durumunda da state'i güncelle
+        if (deleteType === 'suc') {
+          setKayitlar(prev => prev.filter(k => k.id !== selectedKayitId))
+        } else {
+          setGorevKayitlari(prev => prev.filter(k => k.id !== selectedKayitId))
+        }
+        setNotification({ type: 'success', message: 'Kayıt silindi' })
         setShowPasswordModal(false)
         setPasswordAttempts(0)
         setPassword('')
@@ -664,7 +759,7 @@ export default function GBTSistemi() {
                           </td>
                           <td className="px-4 py-4 text-center">
                             <button
-                              onClick={() => handleSilmeBaslat(kayit.id)}
+                              onClick={() => handleSilmeBaslat(kayit.id, 'suc')}
                               disabled={lockoutTime > 0}
                               className={`p-2 rounded-lg transition-all ${
                                 lockoutTime > 0
@@ -681,6 +776,222 @@ export default function GBTSistemi() {
                     </tbody>
                   </table>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* GÖREV KAYITLARI BÖLÜMÜ */}
+        <div className="mt-12 pt-8 border-t border-egm-blue/20">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-3 bg-egm-accent/20 rounded-xl border border-egm-accent/50">
+              <Briefcase className="w-6 h-6 text-egm-accent" />
+            </div>
+            <div>
+              <h2 className="font-display text-2xl text-white">Görev Kayıtları</h2>
+              <p className="text-gray-400 text-sm font-mono">Operasyon ve görev takip sistemi</p>
+            </div>
+          </div>
+
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Görev Form */}
+            <div className="lg:col-span-1">
+              <div className="bg-egm-dark/80 backdrop-blur-sm border border-egm-accent/30 rounded-xl p-6 card-egm">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-egm-accent/20 rounded-lg">
+                    <Plus className="w-5 h-5 text-egm-accent" />
+                  </div>
+                  <h3 className="font-display text-lg text-white">Yeni Görev</h3>
+                </div>
+
+                <form onSubmit={handleGorevEkle} className="space-y-4">
+                  <div>
+                    <label className="block text-gray-400 text-xs font-mono mb-2 uppercase tracking-wider">
+                      <Briefcase className="w-3 h-3 inline mr-1" />
+                      Görev Adı
+                    </label>
+                    <input
+                      type="text"
+                      value={gorevAdi}
+                      onChange={(e) => setGorevAdi(e.target.value)}
+                      placeholder="Görev başlığını girin"
+                      className="w-full bg-egm-darker border border-egm-accent/30 rounded-lg px-4 py-3 text-white font-mono placeholder:text-gray-500 input-egm focus:outline-none focus:border-egm-accent"
+                      disabled={cooldownActive}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-400 text-xs font-mono mb-2 uppercase tracking-wider">
+                      <FileText className="w-3 h-3 inline mr-1" />
+                      Görev Açıklama
+                    </label>
+                    <textarea
+                      value={gorevAciklama}
+                      onChange={(e) => setGorevAciklama(e.target.value)}
+                      placeholder="Görev detayları"
+                      rows={3}
+                      className="w-full bg-egm-darker border border-egm-accent/30 rounded-lg px-4 py-3 text-white font-mono placeholder:text-gray-500 input-egm focus:outline-none focus:border-egm-accent resize-none"
+                      disabled={cooldownActive}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-400 text-xs font-mono mb-2 uppercase tracking-wider">
+                      <Users className="w-3 h-3 inline mr-1" />
+                      Oyuncular
+                    </label>
+                    <input
+                      type="text"
+                      value={oyuncular}
+                      onChange={(e) => setOyuncular(e.target.value)}
+                      placeholder="Oyuncu isimleri (virgülle ayırın)"
+                      className="w-full bg-egm-darker border border-egm-accent/30 rounded-lg px-4 py-3 text-white font-mono placeholder:text-gray-500 input-egm focus:outline-none focus:border-egm-accent"
+                      disabled={cooldownActive}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-400 text-xs font-mono mb-2 uppercase tracking-wider">
+                      <Shield className="w-3 h-3 inline mr-1" />
+                      Birim
+                    </label>
+                    <select
+                      value={birim}
+                      onChange={(e) => setBirim(e.target.value as 'Asayiş' | 'Trafik' | 'PÖH')}
+                      className="w-full bg-egm-darker border border-egm-accent/30 rounded-lg px-4 py-3 text-white font-mono input-egm focus:outline-none focus:border-egm-accent cursor-pointer"
+                      disabled={cooldownActive}
+                    >
+                      <option value="Asayiş">Asayiş</option>
+                      <option value="Trafik">Trafik</option>
+                      <option value="PÖH">PÖH</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={cooldownActive}
+                    className={`w-full py-3 rounded-lg font-mono font-semibold transition-all btn-egm ${
+                      cooldownActive
+                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-egm-accent to-cyan-500 text-white hover:shadow-lg hover:shadow-egm-accent/30'
+                    }`}
+                  >
+                    {cooldownActive ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Bekleniyor ({cooldown}s)
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-2">
+                        <Plus className="w-4 h-4" />
+                        Görev Oluştur
+                      </span>
+                    )}
+                  </button>
+                </form>
+
+                <div className="mt-4 p-4 bg-egm-darker/50 rounded-lg border border-egm-accent/10">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400 font-mono">Toplam Görev</span>
+                    <span className="text-egm-accent font-mono font-bold">{gorevKayitlari.length}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Görev Listesi */}
+            <div className="lg:col-span-2">
+              <div className="bg-egm-dark/80 backdrop-blur-sm border border-egm-accent/30 rounded-xl overflow-hidden">
+                {/* Table Header */}
+                <div className="p-4 border-b border-egm-accent/20 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Database className="w-5 h-5 text-egm-accent" />
+                    <h3 className="font-display text-lg text-white">Aktif Görevler</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 bg-egm-accent rounded-full animate-pulse"></span>
+                    <span className="text-xs font-mono text-gray-400">Canlı Veri</span>
+                  </div>
+                </div>
+
+                {/* Table */}
+                <div className="overflow-x-auto">
+                  {gorevLoading ? (
+                    <div className="p-12 text-center">
+                      <RefreshCw className="w-8 h-8 text-egm-accent animate-spin mx-auto mb-4" />
+                      <p className="text-gray-400 font-mono">Görevler yükleniyor...</p>
+                    </div>
+                  ) : gorevKayitlari.length === 0 ? (
+                    <div className="p-12 text-center">
+                      <Briefcase className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                      <p className="text-gray-400 font-mono">Henüz görev bulunmuyor</p>
+                    </div>
+                  ) : (
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-egm-darker/50">
+                          <th className="text-left px-4 py-3 text-xs font-mono text-gray-400 uppercase tracking-wider">Görev</th>
+                          <th className="text-left px-4 py-3 text-xs font-mono text-gray-400 uppercase tracking-wider">Açıklama</th>
+                          <th className="text-left px-4 py-3 text-xs font-mono text-gray-400 uppercase tracking-wider">Oyuncular</th>
+                          <th className="text-left px-4 py-3 text-xs font-mono text-gray-400 uppercase tracking-wider">Birim</th>
+                          <th className="text-left px-4 py-3 text-xs font-mono text-gray-400 uppercase tracking-wider">Tarih</th>
+                          <th className="text-center px-4 py-3 text-xs font-mono text-gray-400 uppercase tracking-wider">İşlem</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-egm-accent/10">
+                        {gorevKayitlari.map((gorev, index) => (
+                          <tr
+                            key={gorev.id}
+                            className="table-row-egm"
+                            style={{ animationDelay: `${index * 50}ms` }}
+                          >
+                            <td className="px-4 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-egm-accent/20 rounded-lg flex items-center justify-center">
+                                  <Briefcase className="w-4 h-4 text-egm-accent" />
+                                </div>
+                                <span className="text-white font-mono font-medium">{gorev.gorev_adi}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4">
+                              <span className="text-gray-300 font-mono text-sm">{gorev.gorev_aciklama}</span>
+                            </td>
+                            <td className="px-4 py-4">
+                              <span className="text-gray-300 font-mono text-sm">{gorev.oyuncular}</span>
+                            </td>
+                            <td className="px-4 py-4">
+                              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-mono ${
+                                gorev.birim === 'Asayiş' ? 'bg-blue-500/20 text-blue-400' :
+                                gorev.birim === 'Trafik' ? 'bg-yellow-500/20 text-yellow-400' :
+                                'bg-red-500/20 text-red-400'
+                              }`}>
+                                <Shield className="w-3 h-3" />
+                                {gorev.birim}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4">
+                              <span className="text-gray-400 font-mono text-sm">{formatDate(gorev.olusturma_tarihi)}</span>
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <button
+                                onClick={() => handleSilmeBaslat(gorev.id, 'gorev')}
+                                disabled={lockoutTime > 0}
+                                className={`p-2 rounded-lg transition-all ${
+                                  lockoutTime > 0
+                                    ? 'bg-gray-600/20 text-gray-500 cursor-not-allowed'
+                                    : 'bg-red-500/20 text-red-400 hover:bg-red-500/30 hover:text-red-300'
+                                }`}
+                                title={lockoutTime > 0 ? `${lockoutTime}s kilitli` : 'Görevi Sil'}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               </div>
             </div>
           </div>

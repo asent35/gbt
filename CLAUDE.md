@@ -39,114 +39,100 @@ npm run lint
 
 ### Single-Page Application Structure
 
-This is a single-page application with all functionality in `src/app/page.tsx`. There are no separate components - everything is contained in one large client component (`'use client'`).
+This is a **monolithic single-page application** with all functionality in `src/app/page.tsx`. There are no separate components - everything is contained in one large client component (`'use client'`). The entire UI, state management, and business logic exists in this single 500+ line file.
+
+**Important**: When making changes, you must work within this single file. Do not attempt to extract components or refactor into separate files unless explicitly requested.
 
 ### State Management
 
-All state is managed locally with React `useState` hooks:
-- **Records state**: `kayitlar` - Array of crime records
-- **Form state**: `kullaniciAdi`, `sebep`, `sure`, `sureTipi` - Add record form fields
-- **Search state**: `aramaQuery` - Filter records by username or reason
-- **Cooldown state**: `cooldown`, `cooldownActive` - 10-second cooldown after adding records
-- **Password modal state**: Password protection for delete operations
-- **Lockout state**: `passwordAttempts`, `lockoutTime` - 3 failed attempts = 60-second lockout
-- **Notification state**: Toast notifications for user feedback
+All state is managed locally with React `useState` hooks in `src/app/page.tsx`:
+- `kayitlar` - Array of crime records fetched from Supabase
+- `kullaniciAdi`, `sebep`, `sure`, `sureTipi` - Form inputs for adding records
+- `aramaQuery` - Search/filter query string
+- `cooldown`, `cooldownActive` - 10-second cooldown timer after adding records
+- `showPasswordModal`, `password`, `selectedKayitId` - Password modal state for deletions
+- `passwordAttempts`, `lockoutTime` - Failed password tracking (3 fails = 60s lockout)
+- `notification` - Toast notification state (auto-dismisses after 4 seconds)
+- `currentTime` - Real-time clock display updated every second
 
 ### Supabase Integration
 
-**Client**: Initialized in `src/lib/supabase.ts` using environment variables
+**Client**: Initialized in `src/lib/supabase.ts` using environment variables from `.env.local`
 
-**Database Schema**:
+**Database Schema** (`supabase-schema.sql`):
 - Table: `suc_kayitlari`
-- Columns: `id` (UUID), `kullanici_adi`, `sebep`, `sure`, `sure_tipi` ('dakika' | 'saat'), `olusturma_tarihi`
-- RLS enabled with public read/insert/delete policies
-- Password validation happens client-side
+- Columns: `id` (UUID primary key), `kullanici_adi` (VARCHAR 100), `sebep` (TEXT), `sure` (VARCHAR 20), `sure_tipi` (VARCHAR 10 - 'dakika' or 'saat'), `olusturma_tarihi` (TIMESTAMP), `guncelleme_tarihi` (TIMESTAMP)
+- Indexes: `kullanici_adi`, `olusturma_tarihi DESC`, full-text search on `sebep` using Turkish language
+- Trigger: Auto-updates `guncelleme_tarihi` on UPDATE
+- RLS policies: Public read/insert/delete/update (password validation is client-side only)
 
 **Operations**:
-- Fetch all records on load (sorted by `olusturma_tarihi DESC`)
-- Insert new records with cooldown enforcement
-- Delete records after password validation
-- Falls back to demo data if Supabase connection fails
+- `fetchKayitlar()`: SELECT all records ordered by `olusturma_tarihi DESC`
+- Insert: Direct insert into `suc_kayitlari` after form validation and cooldown check
+- Delete: Requires password validation before removing record by ID
+- Fallback: If Supabase connection fails, falls back to hardcoded demo data in `src/app/page.tsx:91-112`
 
 ### Security Features
 
-**Admin Password**: Hardcoded as `AsEnTJ_?WORLD_ESHOT1?STUDIO` in `src/app/page.tsx:8`
-- Used for delete operations only
-- Client-side validation (not secure for production)
-- Consider moving to environment variables
+**Admin Password**: Hardcoded in `src/app/page.tsx:8` as `AsEnTJ_?WORLD_ESHOT1?STUDIO`
+- Only used for delete operations
+- Validated client-side (NOT secure for production use)
+- If moving to production, migrate to environment variable and implement server-side validation
 
 **Rate Limiting**:
-- 10-second cooldown after adding records
-- 3 password attempts before 60-second lockout
-- Lockout timer persists across modal interactions
+- 10-second cooldown after adding records (prevents spam)
+- Password attempts tracked: 3 failed attempts triggers 60-second lockout
+- Lockout persists even if password modal is closed and reopened
 
 ### Styling System
 
-**Theme**: Custom EGM (police/government) themed design using Tailwind CSS
+**Tailwind Configuration** (`tailwind.config.ts`):
 
-**Custom Colors** (defined in `tailwind.config.ts`):
+**Custom Colors**:
 - `egm-dark`: #0a0e14 (main background)
-- `egm-darker`: #060810 (darker backgrounds)
-- `egm-blue`: #1e3a5f (primary blue)
-- `egm-blue-light`: #2563eb (light blue accents)
-- `egm-accent`: #00b4d8 (cyan accent color)
+- `egm-darker`: #060810 (body background)
+- `egm-blue`: #1e3a5f (primary headers)
+- `egm-blue-light`: #2563eb (buttons)
+- `egm-accent`: #00b4d8 (cyan accents)
+- `egm-gold`: #fbbf24, `egm-red`: #ef4444, `egm-green`: #22c55e
 
-**Custom Fonts**:
-- Display: Orbitron (for headers)
-- Mono: JetBrains Mono (for data/forms)
+**Custom Fonts** (loaded in `src/app/layout.tsx`):
+- `font-display`: Orbitron (headers, logo text)
+- `font-mono`: JetBrains Mono (data tables, form inputs)
 
 **Custom Animations**: `pulse-slow`, `scan`, `glow`, `fadeIn`, `slideUp`
 
-### Key UI Features
+**Grid Background**: Custom background pattern using `bg-grid-pattern` utility
 
-- **Tab Navigation**: Toggle between "Sorgula" (search) and "Kayıt Ekle" (add record) views
-- **Real-time Clock**: System time displayed in header (format: Turkish locale)
-- **Live Search**: Filter records as you type
-- **Modal Password Input**: Protected delete with show/hide password toggle
-- **Toast Notifications**: Success/error/warning messages with auto-dismiss
-- **Loading States**: Spinner during initial data fetch
-- **Empty States**: Different messages for no records vs no search results
+### Key Workflows
 
-## Important Implementation Notes
-
-### Adding Records Flow
-1. User fills form (username, reason, duration + unit)
-2. Click "Kayıt Oluştur" button
-3. Validates all fields are filled
-4. Inserts to Supabase (or demo mode if connection fails)
-5. Clears form and starts 10-second cooldown
+**Adding Records**:
+1. User fills form in "Kayıt Ekle" tab: username, reason, duration (number + dakika/saat)
+2. Validates all fields filled (shows warning notification if not)
+3. Checks cooldown not active (shows remaining seconds if active)
+4. Inserts record to Supabase `suc_kayitlari` table
+5. Clears form, starts 10-second cooldown timer
 6. Shows success notification
-7. Updates records list immediately
+7. Re-fetches records to update list immediately
 
-### Deleting Records Flow
-1. User clicks trash icon on record row
-2. Checks if user is locked out from failed attempts
-3. Opens password modal
-4. User enters password and clicks "Onayla ve Sil"
-5. Validates password against hardcoded value
-6. On success: deletes from Supabase and updates UI
-7. On failure: increments attempt counter (3 attempts = 60s lockout)
+**Deleting Records**:
+1. User clicks trash icon on a record row
+2. System checks if locked out from failed password attempts
+3. Opens password modal, stores record ID in `selectedKayitId`
+4. User enters password and submits
+5. Validates against `ADMIN_PASSWORD` constant
+6. Success: Deletes from Supabase, closes modal, resets attempts, shows success notification
+7. Failure: Increments `passwordAttempts`, shows error message
+8. After 3 failures: Sets 60-second `lockoutTime`, blocks all delete attempts until expired
 
-### Search Implementation
-Filter is applied client-side using `Array.filter()`:
-```typescript
-const filteredKayitlar = kayitlar.filter(kayit =>
-  kayit.kullanici_adi.toLowerCase().includes(aramaQuery.toLowerCase()) ||
-  kayit.sebep.toLowerCase().includes(aramaQuery.toLowerCase())
-)
-```
-
-## Database Schema Reference
-
-Run this SQL in Supabase SQL Editor (available in `supabase-schema.sql`):
-- Creates `suc_kayitlari` table with UUID primary key
-- Adds indexes on `kullanici_adi` and `olusturma_tarihi`
-- Enables Row Level Security with public policies
-- Includes sample data
+**Search/Filter**:
+- Client-side filtering using `Array.filter()` on `kayitlar` array
+- Matches against both `kullanici_adi` and `sebep` fields (case-insensitive)
+- Filters applied in real-time as user types in search input
 
 ## Deployment
 
-**Recommended**: Vercel
-1. Connect GitHub repository to Vercel
-2. Add environment variables in Vercel dashboard
-3. Deploy automatically on push
+**Vercel** (recommended):
+1. Connect GitHub repository
+2. Add environment variables: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+3. Auto-deploys on push to main branch
